@@ -1,12 +1,6 @@
-# Datei: pi_explorer_gui.py
-# Raspberry Pi Explorer mit:
-# - Kopieren + Einfügen
-# - Verschieben
-# - USB Support
-# - Suche
-# - Datei Editor
-# - Ausführen
-# - Blauem GUI
+# Datei: pi_explorer_pro.py
+# Raspberry Pi Datei Explorer PRO
+# Voll überarbeitetes GUI
 
 import curses
 import os
@@ -14,30 +8,45 @@ import shutil
 import subprocess
 
 current_path = os.path.expanduser("~")
+
 selected = 0
 scroll_offset = 0
 
 clipboard = None
 clipboard_mode = None
 
+search_text = ""
 
-def get_files(path, search=""):
+
+# =========================
+# DATEIEN HOLEN
+# =========================
+
+def get_files(path):
 
     try:
+
         files = os.listdir(path)
+
         files.sort()
 
-        if search:
+        if search_text:
+
             files = [
                 f for f in files
-                if search.lower() in f.lower()
+                if search_text.lower() in f.lower()
             ]
 
         return [".."] + files
 
     except:
+
         return [".."]
 
+
+# =========================
+# USB FINDEN
+# =========================
 
 def find_usb():
 
@@ -54,11 +63,13 @@ def find_usb():
         if os.path.exists(base):
 
             try:
+
                 for item in os.listdir(base):
 
                     full = os.path.join(base, item)
 
                     if os.path.ismount(full):
+
                         usb_list.append(full)
 
             except:
@@ -66,6 +77,10 @@ def find_usb():
 
     return usb_list
 
+
+# =========================
+# EINGABE BOX
+# =========================
 
 def input_box(stdscr, text):
 
@@ -84,13 +99,28 @@ def input_box(stdscr, text):
     return value
 
 
-def choose_usb(stdscr):
+# =========================
+# MELDUNG
+# =========================
 
-    usbs = find_usb()
+def message(stdscr, text):
 
-    if not usbs:
-        input_box(stdscr, "Kein USB gefunden.")
-        return None
+    stdscr.clear()
+
+    stdscr.addstr(0, 0, text)
+
+    stdscr.addstr(2, 0, "ENTER drücken")
+
+    stdscr.refresh()
+
+    stdscr.getch()
+
+
+# =========================
+# MENÜ
+# =========================
+
+def menu(stdscr, title, options):
 
     choice = 0
 
@@ -98,40 +128,100 @@ def choose_usb(stdscr):
 
         stdscr.clear()
 
-        stdscr.addstr(0, 0, "USB Stick auswählen")
+        stdscr.addstr(0, 0, title)
 
-        for i, usb in enumerate(usbs):
+        for i, option in enumerate(options):
 
             if i == choice:
 
                 stdscr.attron(curses.A_REVERSE)
-                stdscr.addstr(i + 2, 0, usb)
+
+                stdscr.addstr(i + 2, 0, option)
+
                 stdscr.attroff(curses.A_REVERSE)
 
             else:
-                stdscr.addstr(i + 2, 0, usb)
+
+                stdscr.addstr(i + 2, 0, option)
+
+        stdscr.refresh()
 
         key = stdscr.getch()
 
         if key == curses.KEY_UP:
-            choice = (choice - 1) % len(usbs)
+
+            choice = (choice - 1) % len(options)
 
         elif key == curses.KEY_DOWN:
-            choice = (choice + 1) % len(usbs)
+
+            choice = (choice + 1) % len(options)
 
         elif key == 10:
-            return usbs[choice]
 
-        elif key == 27:
-            return None
+            return options[choice]
 
 
-def draw_ui(stdscr, files, search):
+# =========================
+# USB AUSWAHL
+# =========================
+
+def choose_usb(stdscr):
+
+    usbs = find_usb()
+
+    if not usbs:
+
+        message(stdscr, "Kein USB Stick gefunden")
+
+        return None
+
+    return menu(stdscr, "USB auswählen", usbs)
+
+
+# =========================
+# DATEI EINFÜGEN
+# =========================
+
+def paste():
+
+    global clipboard
+    global clipboard_mode
+    global current_path
+
+    if not clipboard:
+
+        return
+
+    name = os.path.basename(clipboard)
+
+    target = os.path.join(current_path, name)
+
+    if clipboard_mode == "copy":
+
+        if os.path.isdir(clipboard):
+
+            shutil.copytree(clipboard, target)
+
+        else:
+
+            shutil.copy2(clipboard, target)
+
+    elif clipboard_mode == "move":
+
+        shutil.move(clipboard, target)
+
+        clipboard = None
+        clipboard_mode = None
+
+
+# =========================
+# GUI ZEICHNEN
+# =========================
+
+def draw(stdscr, files):
 
     global selected
     global scroll_offset
-    global clipboard
-    global clipboard_mode
 
     stdscr.clear()
 
@@ -142,31 +232,35 @@ def draw_ui(stdscr, files, search):
 
     stdscr.bkgd(" ", curses.color_pair(1))
 
-    title = f" Raspberry Pi Explorer | {current_path}"
+    top = f" Raspberry Pi Explorer PRO | {current_path}"
 
     stdscr.addstr(
         0,
         0,
-        title[:w - 1],
+        top[:w - 1],
         curses.color_pair(2)
     )
 
-    search_text = f"Suche: {search}"
-
-    stdscr.addstr(1, 0, search_text[:w - 1])
+    stdscr.addstr(
+        1,
+        0,
+        f"Suche: {search_text}"[:w - 1]
+    )
 
     if clipboard:
-        clip_text = f"Zwischenablage: {os.path.basename(clipboard)} ({clipboard_mode})"
-        stdscr.addstr(2, 0, clip_text[:w - 1])
+
+        clip = f"Zwischenablage: {os.path.basename(clipboard)} ({clipboard_mode})"
+
+        stdscr.addstr(2, 0, clip[:w - 1])
 
     help_lines = [
         "HOCH/RUNTER = Scrollen",
-        "ENTER = Öffnen / Menü",
+        "ENTER = Menü",
         "BACKSPACE = Zurück",
         "S = Suche",
-        "U = USB Auswahl",
+        "U = USB",
         "P = Einfügen",
-        "Q = Beenden"
+        "Q = Ende"
     ]
 
     for i, line in enumerate(help_lines):
@@ -178,17 +272,19 @@ def draw_ui(stdscr, files, search):
             curses.color_pair(2)
         )
 
-    visible_height = h - 12
+    visible = h - 12
 
     if selected < scroll_offset:
+
         scroll_offset = selected
 
-    if selected >= scroll_offset + visible_height:
-        scroll_offset = selected - visible_height + 1
+    if selected >= scroll_offset + visible:
+
+        scroll_offset = selected - visible + 1
 
     for idx in range(
         scroll_offset,
-        min(len(files), scroll_offset + visible_height)
+        min(len(files), scroll_offset + visible)
     ):
 
         file = files[idx]
@@ -198,8 +294,11 @@ def draw_ui(stdscr, files, search):
         full = os.path.join(current_path, file)
 
         if os.path.isdir(full):
+
             display = f"[ORDNER] {file}"
+
         else:
+
             display = f"         {file}"
 
         if idx == selected:
@@ -211,85 +310,71 @@ def draw_ui(stdscr, files, search):
             stdscr.attroff(curses.A_REVERSE)
 
         else:
+
             stdscr.addstr(y, 0, display[:w - 1])
 
     stdscr.refresh()
 
 
-def file_menu(stdscr):
+# =========================
+# DATEI STARTEN
+# =========================
+
+def run_file(stdscr, path):
 
     options = [
-        "Ausführen",
-        "Editor",
-        "Löschen",
-        "Kopieren",
-        "Verschieben",
-        "Umbenennen",
-        "Neue Datei",
-        "Neuer Ordner",
-        "Zurück"
+        "python3",
+        "bash",
+        "sh",
+        "xdg-open",
+        "./datei",
+        "Eigener Befehl"
     ]
 
-    choice = 0
+    action = menu(stdscr, "Datei starten mit", options)
 
-    while True:
+    curses.endwin()
 
-        stdscr.clear()
+    try:
 
-        stdscr.addstr(0, 0, "Datei Menü")
+        if action == "python3":
 
-        for i, opt in enumerate(options):
+            subprocess.run(["python3", path])
 
-            if i == choice:
+        elif action == "bash":
 
-                stdscr.attron(curses.A_REVERSE)
+            subprocess.run(["bash", path])
 
-                stdscr.addstr(i + 2, 0, opt)
+        elif action == "sh":
 
-                stdscr.attroff(curses.A_REVERSE)
+            subprocess.run(["sh", path])
 
-            else:
-                stdscr.addstr(i + 2, 0, opt)
+        elif action == "xdg-open":
 
-        key = stdscr.getch()
+            subprocess.run(["xdg-open", path])
 
-        if key == curses.KEY_UP:
-            choice = (choice - 1) % len(options)
+        elif action == "./datei":
 
-        elif key == curses.KEY_DOWN:
-            choice = (choice + 1) % len(options)
+            subprocess.run(["chmod", "+x", path])
 
-        elif key == 10:
-            return options[choice]
+            subprocess.run([path])
+
+        elif action == "Eigener Befehl":
+
+            cmd = input("Befehl: ")
+
+            subprocess.run(cmd.split() + [path])
+
+    except Exception as e:
+
+        print("Fehler:", e)
+
+    input("ENTER drücken...")
 
 
-def paste_file():
-
-    global clipboard
-    global clipboard_mode
-    global current_path
-
-    if not clipboard:
-        return
-
-    name = os.path.basename(clipboard)
-
-    ziel = os.path.join(current_path, name)
-
-    if clipboard_mode == "copy":
-
-        if os.path.isdir(clipboard):
-            shutil.copytree(clipboard, ziel)
-        else:
-            shutil.copy2(clipboard, ziel)
-
-    elif clipboard_mode == "move":
-
-        shutil.move(clipboard, ziel)
-
-        clipboard = None
-        clipboard_mode = None
-
+# =========================
+# HAUPT PROGRAMM
+# =========================
 
 def main(stdscr):
 
@@ -297,172 +382,240 @@ def main(stdscr):
     global selected
     global clipboard
     global clipboard_mode
+    global search_text
 
     curses.curs_set(0)
 
     stdscr.keypad(True)
 
-    search = ""
-
     while True:
 
-        files = get_files(current_path, search)
+        files = get_files(current_path)
 
         if selected >= len(files):
+
             selected = len(files) - 1
 
-        draw_ui(stdscr, files, search)
+        draw(stdscr, files)
 
         key = stdscr.getch()
 
-        if key == curses.KEY_UP:
-            selected = max(0, selected - 1)
+        # RUNTER
+        if key == curses.KEY_DOWN:
 
-        elif key == curses.KEY_DOWN:
-            selected = min(len(files) - 1, selected + 1)
+            selected = min(
+                len(files) - 1,
+                selected + 1
+            )
 
-        elif key == ord("q"):
-            break
+        # HOCH
+        elif key == curses.KEY_UP:
 
+            selected = max(
+                0,
+                selected - 1
+            )
+
+        # SUCHE
         elif key == ord("s"):
 
-            search = input_box(
+            search_text = input_box(
                 stdscr,
-                "Suche:"
+                "Suche eingeben:"
             )
 
             selected = 0
 
+        # USB
         elif key == ord("u"):
 
             usb = choose_usb(stdscr)
 
             if usb:
+
                 current_path = usb
+
                 selected = 0
 
+        # EINFÜGEN
         elif key == ord("p"):
 
             try:
-                paste_file()
+
+                paste()
 
             except Exception as e:
-                input_box(stdscr, f"Fehler: {e}")
 
+                message(
+                    stdscr,
+                    f"Fehler: {e}"
+                )
+
+        # ZURÜCK
         elif key == curses.KEY_BACKSPACE or key == 127:
 
             current_path = os.path.dirname(current_path)
 
             selected = 0
 
+        # ENDE
+        elif key == ord("q"):
+
+            break
+
+        # ENTER
         elif key == 10:
 
             file = files[selected]
 
-            full_path = os.path.join(current_path, file)
+            full = os.path.join(
+                current_path,
+                file
+            )
 
-            if os.path.isdir(full_path):
+            is_folder = os.path.isdir(full)
 
-                current_path = os.path.abspath(full_path)
+            if is_folder:
 
-                selected = 0
+                options = [
+                    "Öffnen",
+                    "Kopieren",
+                    "Verschieben",
+                    "Umbenennen",
+                    "Löschen",
+                    "Neue Datei",
+                    "Neuer Ordner",
+                    "Zurück"
+                ]
 
             else:
 
-                action = file_menu(stdscr)
+                options = [
+                    "Ausführen",
+                    "Editor",
+                    "Kopieren",
+                    "Verschieben",
+                    "Umbenennen",
+                    "Löschen",
+                    "Zurück"
+                ]
 
-                try:
+            action = menu(
+                stdscr,
+                file,
+                options
+            )
 
-                    if action == "Ausführen":
+            try:
 
-                        cmd = input_box(
-                            stdscr,
-                            "Befehl:"
-                        )
+                # ÖFFNEN
+                if action == "Öffnen":
 
-                        curses.endwin()
+                    current_path = full
 
-                        subprocess.run(
-                            cmd.split() + [full_path]
-                        )
+                    selected = 0
 
-                        input("ENTER drücken...")
+                # AUSFÜHREN
+                elif action == "Ausführen":
 
-                    elif action == "Editor":
-
-                        curses.endwin()
-
-                        subprocess.run(
-                            ["nano", full_path]
-                        )
-
-                    elif action == "Löschen":
-
-                        os.remove(full_path)
-
-                    elif action == "Kopieren":
-
-                        clipboard = full_path
-                        clipboard_mode = "copy"
-
-                    elif action == "Verschieben":
-
-                        clipboard = full_path
-                        clipboard_mode = "move"
-
-                    elif action == "Umbenennen":
-
-                        neu = input_box(
-                            stdscr,
-                            "Neuer Name:"
-                        )
-
-                        os.rename(
-                            full_path,
-                            os.path.join(
-                                current_path,
-                                neu
-                            )
-                        )
-
-                    elif action == "Neue Datei":
-
-                        name = input_box(
-                            stdscr,
-                            "Dateiname:"
-                        )
-
-                        open(
-                            os.path.join(
-                                current_path,
-                                name
-                            ),
-                            "w"
-                        ).close()
-
-                    elif action == "Neuer Ordner":
-
-                        name = input_box(
-                            stdscr,
-                            "Ordnername:"
-                        )
-
-                        os.mkdir(
-                            os.path.join(
-                                current_path,
-                                name
-                            )
-                        )
-
-                except Exception as e:
-
-                    input_box(
+                    run_file(
                         stdscr,
-                        f"Fehler: {e}"
+                        full
                     )
+
+                # EDITOR
+                elif action == "Editor":
+
+                    curses.endwin()
+
+                    subprocess.run(
+                        ["nano", full]
+                    )
+
+                # KOPIEREN
+                elif action == "Kopieren":
+
+                    clipboard = full
+                    clipboard_mode = "copy"
+
+                # VERSCHIEBEN
+                elif action == "Verschieben":
+
+                    clipboard = full
+                    clipboard_mode = "move"
+
+                # UMBENENNEN
+                elif action == "Umbenennen":
+
+                    new_name = input_box(
+                        stdscr,
+                        "Neuer Name:"
+                    )
+
+                    os.rename(
+                        full,
+                        os.path.join(
+                            current_path,
+                            new_name
+                        )
+                    )
+
+                # LÖSCHEN
+                elif action == "Löschen":
+
+                    if os.path.isdir(full):
+
+                        shutil.rmtree(full)
+
+                    else:
+
+                        os.remove(full)
+
+                # NEUE DATEI
+                elif action == "Neue Datei":
+
+                    name = input_box(
+                        stdscr,
+                        "Dateiname:"
+                    )
+
+                    open(
+                        os.path.join(
+                            current_path,
+                            name
+                        ),
+                        "w"
+                    ).close()
+
+                # NEUER ORDNER
+                elif action == "Neuer Ordner":
+
+                    name = input_box(
+                        stdscr,
+                        "Ordnername:"
+                    )
+
+                    os.mkdir(
+                        os.path.join(
+                            current_path,
+                            name
+                        )
+                    )
+
+            except Exception as e:
+
+                message(
+                    stdscr,
+                    f"Fehler: {e}"
+                )
 
     curses.endwin()
 
 
+# =========================
+# START
+# =========================
+
 if __name__ == "__main__":
+
     curses.wrapper(main)
