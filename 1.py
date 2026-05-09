@@ -1,11 +1,24 @@
-# Datei: pi_explorer_pro.py
-# Raspberry Pi Datei Explorer PRO
-# Voll überarbeitetes GUI
+# Datei: pi_explorer_ultra.py
+# Raspberry Pi Explorer ULTRA
+# Voller Datei Explorer mit:
+# - Blauem GUI
+# - USB Support
+# - Suche
+# - ZIP/TAR Entpacken
+# - Kopieren/Einfügen
+# - Verschieben
+# - Löschen
+# - Umbenennen
+# - Neue Dateien/Ordner
+# - Datei Ausführen
+# - Nano Editor
 
 import curses
 import os
 import shutil
 import subprocess
+import zipfile
+import tarfile
 
 current_path = os.path.expanduser("~")
 
@@ -19,7 +32,7 @@ search_text = ""
 
 
 # =========================
-# DATEIEN HOLEN
+# DATEIEN LADEN
 # =========================
 
 def get_files(path):
@@ -79,7 +92,7 @@ def find_usb():
 
 
 # =========================
-# EINGABE BOX
+# EINGABE
 # =========================
 
 def input_box(stdscr, text):
@@ -100,7 +113,7 @@ def input_box(stdscr, text):
 
 
 # =========================
-# MELDUNG
+# NACHRICHT
 # =========================
 
 def message(stdscr, text):
@@ -232,7 +245,7 @@ def draw(stdscr, files):
 
     stdscr.bkgd(" ", curses.color_pair(1))
 
-    top = f" Raspberry Pi Explorer PRO | {current_path}"
+    top = f" Raspberry Pi Explorer ULTRA | {current_path}"
 
     stdscr.addstr(
         0,
@@ -373,7 +386,57 @@ def run_file(stdscr, path):
 
 
 # =========================
-# HAUPT PROGRAMM
+# EXTRAHIEREN
+# =========================
+
+def extract_archive(stdscr, full):
+
+    extract_folder = os.path.join(
+        current_path,
+        "extrahiert"
+    )
+
+    os.makedirs(
+        extract_folder,
+        exist_ok=True
+    )
+
+    try:
+
+        if full.endswith(".zip"):
+
+            with zipfile.ZipFile(full, "r") as zip_ref:
+
+                zip_ref.extractall(extract_folder)
+
+            message(stdscr, "ZIP entpackt!")
+
+        elif (
+            full.endswith(".tar")
+            or full.endswith(".tar.gz")
+            or full.endswith(".tgz")
+        ):
+
+            with tarfile.open(full) as tar_ref:
+
+                tar_ref.extractall(extract_folder)
+
+            message(stdscr, "Archiv entpackt!")
+
+        else:
+
+            message(
+                stdscr,
+                "Format nicht unterstützt"
+            )
+
+    except Exception as e:
+
+        message(stdscr, f"Fehler: {e}")
+
+
+# =========================
+# HAUPTPROGRAMM
 # =========================
 
 def main(stdscr):
@@ -493,6 +556,7 @@ def main(stdscr):
                 options = [
                     "Ausführen",
                     "Editor",
+                    "Extrahieren",
                     "Kopieren",
                     "Verschieben",
                     "Umbenennen",
@@ -530,6 +594,14 @@ def main(stdscr):
 
                     subprocess.run(
                         ["nano", full]
+                    )
+
+                # EXTRAHIEREN
+                elif action == "Extrahieren":
+
+                    extract_archive(
+                        stdscr,
+                        full
                     )
 
                 # KOPIEREN
